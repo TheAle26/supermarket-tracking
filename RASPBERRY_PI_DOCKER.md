@@ -59,6 +59,9 @@ DJANGO_ALLOWED_HOSTS=192.168.1.50,supermarket.local,localhost,127.0.0.1
 WEB_PORT=8080
 ```
 
+The values shown by your `docker compose config` output must not still begin
+with `replace-`. Production startup deliberately rejects those placeholders.
+
 Port `8080` is the default because another Django container may already use
 port `8000`. Change `WEB_PORT` if 8080 is also occupied.
 
@@ -72,6 +75,50 @@ From the project directory:
 docker compose config
 docker compose build
 docker compose up -d
+```
+
+### Older Docker daemon compatibility
+
+If the build reports an error similar to:
+
+```text
+client version 1.52 is too new. Maximum supported API version is 1.41
+```
+
+the Compose/buildx client is newer than the Docker daemon. This is unrelated to
+other running containers. First inspect both sides:
+
+```bash
+docker version
+docker compose version
+```
+
+The preferred long-term fix is to upgrade Docker Engine, CLI, buildx, and the
+Compose plugin together from the same Docker package repository. Existing named
+volumes and containers are not deleted by a package upgrade. A daemon restart
+briefly stops containers; containers with `always` or `unless-stopped` restart
+policies start again automatically.
+
+Before upgrading, record the running containers and their restart policies:
+
+```bash
+docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}'
+docker inspect -f '{{.Name}} -> {{.HostConfig.RestartPolicy.Name}}' $(docker ps -q)
+```
+
+For a temporary compatibility path, force the client to use the daemon's API,
+build the image directly, and ask Compose not to rebuild it:
+
+```bash
+export DOCKER_API_VERSION=1.41
+docker build -t supermarket-tracking:local .
+docker compose up -d --no-build
+```
+
+Remove the override after Docker Engine is upgraded:
+
+```bash
+unset DOCKER_API_VERSION
 ```
 
 The first startup waits for PostgreSQL, runs Django migrations, creates the
@@ -88,6 +135,16 @@ Check every service:
 
 ```bash
 docker compose ps
+```
+
+The existing Docker application remains separate. This stack uses the Compose
+project name `supermarket-tracking`, its own default network, and volumes named
+`supermarket-tracking_postgres_data` and `supermarket-tracking_redis_data`.
+Only host port 8080 is published by default. Check that it is free before startup:
+
+```bash
+docker ps --format 'table {{.Names}}\t{{.Ports}}'
+sudo ss -ltnp | grep ':8080 ' || true
 ```
 
 Open the dashboard at:

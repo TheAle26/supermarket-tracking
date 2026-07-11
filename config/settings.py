@@ -9,6 +9,8 @@ from pathlib import Path
 import os
 import sys
 
+from django.core.exceptions import ImproperlyConfigured
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 APPS_DIR = BASE_DIR / "apps"
 if str(APPS_DIR) not in sys.path:
@@ -83,6 +85,16 @@ DATABASES = {
         "CONN_MAX_AGE": 60,
     }
 }
+
+if not DEBUG:
+    if SECRET_KEY == "dev-only-supermarket-tracking-key" or SECRET_KEY.startswith("replace-"):
+        raise ImproperlyConfigured(
+            "Set a real DJANGO_SECRET_KEY before starting production."
+        )
+    if not DATABASES["default"]["PASSWORD"] or str(DATABASES["default"]["PASSWORD"]).startswith("replace-"):
+        raise ImproperlyConfigured(
+            "Set a real DB_PASSWORD before starting production."
+        )
 
 PSQLEXTRA_PARTITIONING_MANAGER = "catalog.partitioning.manager"
 

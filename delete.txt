@@ -1,0 +1,150 @@
+Optimized tool selectionI’m reviewing the project structure and entry points so I can explain how it runs and the quickest way to start and verify it.
+
+Read [](file:///c%3A/Proyectos/supermarket%20tracking/ARCHITECTURE.md)
+
+Read [](file:///c%3A/Proyectos/supermarket%20tracking/config/urls.py)
+
+Read [](file:///c%3A/Proyectos/supermarket%20tracking/requirements.txt)
+
+Read [](file:///c%3A/Proyectos/supermarket%20tracking/apps/web/urls.py)
+
+Read [](file:///c%3A/Proyectos/supermarket%20tracking/apps/web/views.py)
+
+I’ve confirmed the app is a Django-based price comparison platform; I’m checking the startup commands and configuration so I can give you exact steps rather than generic advice.
+
+Searched for files matching `supermarket tracking` · `**/*settings*.py`, 1 match
+
+Searched for files matching `supermarket tracking` · `**/manage.py`, no matches
+
+Searched for text `seed_demo|pgpartition|celery|runserver|DATABASES|REDIS|BROKER` (`supermarket tracking` · `**/*.{py,md,txt}`), 45 results
+
+The architecture notes are clear, and I’m verifying the actual startup path in the workspace so I can give you commands that match this project rather than a generic Django checklist.
+
+Read [](file:///c%3A/Proyectos/supermarket%20tracking)
+
+Ran terminal command: cd "c:/Proyectos/supermarket tracking"; python -c "import os; print(os.path.exists('manage.py')); print(os.listdir('.'))"
+
+The repo layout is clear now; I’m validating whether the Django entry point is present in this workspace, since that determines the exact start command.
+
+Read [](file:///c%3A/Proyectos/supermarket%20tracking/config/settings_snippet.py)
+
+The repository is structured like a Django app skeleton rather than a fully wired project, so I’m reading the demo and task files to outline the intended startup and validation flow precisely.
+
+Read [](file:///c%3A/Proyectos/supermarket%20tracking/apps/catalog/management/commands/seed_demo.py)
+
+Read [](file:///c%3A/Proyectos/supermarket%20tracking/apps/scraping/tasks.py)
+
+Read [](file:///c%3A/Proyectos/supermarket%20tracking/config/celery.py)
+
+Searched for text `DJANGO_SETTINGS_MODULE|urlpatterns =|Application definition|INSTALLED_APPS` (`supermarket tracking` · `**/*.py`), 4 results
+
+## What this project is
+
+This is a supermarket price-comparison platform. Its main flow is:
+
+- catalog stores products, stores, promotions, and price history.
+- scraping collects listings from retailers with store-specific scrapers.
+- The pricing engine computes the best “optimal unit price” for promos such as 2x1, 3x2, percent-off, and bulk deals.
+- web exposes a dashboard and JSON APIs so you can compare prices, inspect history, and optimize a cart.
+- celery.py and tasks.py schedule scraping and retention jobs with Celery/Redis.
+
+The design is documented in ARCHITECTURE.md.
+
+## Current state of the workspace
+
+I verified that the workspace contains the architecture docs and the app modules, but it does not currently expose a runnable Django entrypoint or full settings module in the visible tree. In practice, that means this is a partial project skeleton rather than a fully bootstrapped app yet.
+
+## How to start it
+
+### 1) Prerequisites
+You will need:
+- Python
+- PostgreSQL
+- Redis
+- optionally Chrome/Chromium for Playwright-based scraping
+
+### 2) Create and activate a virtual environment
+
+```powershell
+cd "c:\Proyectos\supermarket tracking"
+python -m venv venv
+.\venv\Scripts\activate
+```
+
+### 3) Install dependencies
+
+```powershell
+pip install -r requirements.txt
+pip install playwright
+playwright install chromium
+```
+
+### 4) Prepare PostgreSQL and Redis
+Make sure PostgreSQL is running and create a database, for example:
+
+```powershell
+createdb price_compare
+```
+
+If your setup requires a user and password, create them accordingly. Then make sure Redis is running, for example:
+
+```powershell
+redis-server
+```
+
+### 5) Wire the Django project
+The repo includes the settings guidance in settings_snippet.py, but you still need to merge that into a real Django settings file and provide the Django entrypoint used by your environment. Once that is in place, the intended bootstrap flow is:
+
+```powershell
+python manage.py migrate
+python manage.py pgpartition --yes
+python manage.py seed_demo
+python manage.py runserver
+```
+
+The seed command is defined in seed_demo.py, and it populates demo products and prices so the dashboard has data to show.
+
+### 6) Open the app
+After the server starts, open:
+
+```text
+http://127.0.0.1:8000/
+```
+
+## How to test it
+
+### Basic smoke test
+Open the dashboard in the browser and confirm it loads.
+
+### API smoke test
+Run these in another terminal:
+
+```powershell
+curl "http://127.0.0.1:8000/api/products/?q=coca"
+curl "http://127.0.0.1:8000/api/products/7790895000123/compare/"
+```
+
+### Cart API test
+
+```powershell
+curl -X POST "http://127.0.0.1:8000/api/cart/optimize/" `
+  -H "Content-Type: application/json" `
+  -d "{\"items\":[{\"ean\":\"7790895000123\",\"quantity\":2}]}"
+```
+
+## Optional: run the background jobs
+
+If you want the scheduled scraping pipeline to work too, start Celery worker and beat:
+
+```powershell
+celery -A config.celery worker -l info
+celery -A config.celery beat -l info
+```
+
+## Short version
+
+- The app compares prices across supermarkets.
+- It scrapes data, computes promo-aware unit prices, and serves a dashboard.
+- To run it, you need Python dependencies, PostgreSQL, Redis, the Django settings wiring, then migrate/seed/runserver.
+
+If you want, I can help you with the next step: wiring the missing Django bootstrapping so this project actually starts from the current workspace.

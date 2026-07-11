@@ -1,0 +1,93 @@
+name: supermarket-tracking
+
+x-app-environment: &app-environment
+  DJANGO_DEBUG: "0"
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+  DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
+  DJANGO_SECURE_COOKIES: ${DJANGO_SECURE_COOKIES:-0}
+  DB_NAME: ${DB_NAME:-price_compare}
+  DB_USER: ${DB_USER:-supermarket_app}
+  DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+  DB_HOST: db
+  DB_PORT: "5432"
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/1
+  CELERY_RESULT_EXPIRES: ${CELERY_RESULT_EXPIRES:-3600}
+  PRICE_MAX_AGE_HOURS: ${PRICE_MAX_AGE_HOURS:-48}
+
+x-app-service: &app-service
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: supermarket-tracking:local
+  init: true
+  restart: unless-stopped
+  environment: *app-environment
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-price_compare}
+      POSTGRES_USER: ${DB_USER:-supermarket_app}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Never evict Celery queue keys: eviction can silently discard scrape jobs.
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    <<: *app-service
+    command: >-
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py pgpartition --yes &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000
+             --workers $${GUNICORN_WORKERS:-2} --timeout 120 --access-logfile -"
+    ports:
+      - "${WEB_PORT:-8080}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    <<: *app-service
+    command: celery -A config.celery worker --loglevel=INFO --concurrency=${CELERY_CONCURRENCY:-2}
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+
+  beat:
+    <<: *app-service
+    command: celery -A config.celery beat --loglevel=INFO
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+
+volumes:
+  postgres_data:
+  redis_data:

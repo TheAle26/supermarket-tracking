@@ -1,0 +1,21 @@
+# --- Core framework ---
+Django>=5.0,<5.2
+gunicorn>=22.0,<24
+whitenoise>=6.7,<7
+psycopg[binary]>=3.1              # PostgreSQL driver (psycopg 3)
+django-postgres-extra>=2.0        # native RANGE partitioning for PriceHistory
+
+# --- Orchestration ---
+celery>=5.3
+redis>=5.0                        # broker + result backend
+django-celery-beat>=2.6           # DB-backed periodic schedule
+
+# --- Scraping: cheap path (VTEX / JSON APIs) ---
+curl-cffi>=0.7                    # TLS-impersonating HTTP client (beats JA3 blocks)
+orjson>=3.9                       # fast JSON
+tenacity>=8.2                     # granular in-scraper retry helpers
+
+# --- Scraping: hard path (Datadome / Next.js SSR) ---
+playwright>=1.44                  # headless Chromium for Sodimac
+playwright-stealth>=1.0           # evade headless fingerprinting
+# (residential AR proxy pool is configured out-of-band, per store scraper_config)

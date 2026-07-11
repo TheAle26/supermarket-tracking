@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comparador de Precios</title>
+  <style>
+    :root {
+      --bg:#0f1420; --panel:#171e2e; --panel2:#1e2740; --line:#2a3550;
+      --text:#e8edf7; --muted:#8b97b4; --accent:#4ade80; --accent2:#38bdf8;
+      --coto:#e4002b; --carrefour:#004b9b; --changomas:#f5a623; --sodimac:#e2231a;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif;
+           background:var(--bg); color:var(--text); }
+    header { padding:18px 24px; border-bottom:1px solid var(--line);
+             display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+    header h1 { font-size:18px; margin:0; font-weight:700; }
+    .tabs { display:flex; gap:6px; margin-left:auto; }
+    .tab { padding:8px 16px; border-radius:8px; cursor:pointer; color:var(--muted);
+           border:1px solid transparent; }
+    .tab.active { background:var(--panel2); color:var(--text); border-color:var(--line); }
+    main { max-width:1000px; margin:0 auto; padding:24px; }
+    .search { display:flex; gap:8px; margin-bottom:16px; }
+    input[type=text] { flex:1; padding:11px 14px; border-radius:9px; border:1px solid var(--line);
+                       background:var(--panel); color:var(--text); font-size:15px; }
+    .results { display:grid; gap:8px; }
+    .result-row, .card { background:var(--panel); border:1px solid var(--line);
+                         border-radius:11px; padding:14px 16px; }
+    .result-row { display:flex; align-items:center; gap:12px; cursor:pointer; }
+    .result-row:hover { border-color:var(--accent2); }
+    .result-row .name { font-weight:600; }
+    .result-row .meta { color:var(--muted); font-size:13px; }
+    .price { margin-left:auto; font-weight:700; font-size:16px; white-space:nowrap; }
+    .muted { color:var(--muted); }
+    .offers { display:grid; gap:10px; margin-top:14px; }
+    .offer { display:flex; align-items:center; gap:14px; padding:14px 16px;
+             border-radius:11px; background:var(--panel); border:1px solid var(--line); }
+    .offer.best { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+    .dot { width:10px; height:10px; border-radius:50%; flex:none; }
+    .offer .store { font-weight:600; min-width:110px; }
+    .badge { font-size:12px; padding:2px 8px; border-radius:20px; background:var(--panel2);
+             color:var(--accent); border:1px solid var(--line); }
+    .badge.save { color:#fca5a5; }
+    .offer .oup { margin-left:auto; text-align:right; }
+    .offer .oup b { font-size:17px; }
+    .offer .list { color:var(--muted); text-decoration:line-through; font-size:12px; }
+    .tag { display:inline-block; font-size:11px; color:var(--muted); margin-right:6px; }
+    h2 { font-size:16px; margin:22px 0 6px; }
+    .chart { width:100%; background:var(--panel); border:1px solid var(--line);
+             border-radius:12px; padding:12px; }
+    .legend { display:flex; gap:16px; flex-wrap:wrap; margin:10px 2px; font-size:13px; }
+    .legend span { display:flex; align-items:center; gap:6px; }
+    table { width:100%; border-collapse:collapse; }
+    th,td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); }
+    th { color:var(--muted); font-weight:600; font-size:13px; }
+    td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+    .cart-add { display:flex; gap:8px; margin-bottom:12px; }
+    .qty { width:64px; }
+    button { padding:11px 16px; border-radius:9px; border:1px solid var(--line);
+             background:var(--panel2); color:var(--text); cursor:pointer; font-size:14px; }
+    button.primary { background:var(--accent); color:#04120a; border-color:var(--accent);
+                     font-weight:700; }
+    .pill { background:var(--panel2); border:1px solid var(--line); border-radius:20px;
+            padding:4px 10px; font-size:13px; display:inline-flex; gap:8px; align-items:center; }
+    .pill b { color:var(--accent); }
+    .summary { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:14px 0; }
+    .summary .card b { font-size:22px; }
+    .win { color:var(--accent); }
+    .hidden { display:none; }
+    .empty { color:var(--muted); text-align:center; padding:40px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🛒 Comparador de Precios <span class="muted" style="font-weight:400">· AR</span></h1>
+    <div class="tabs">
+      <div class="tab active" data-view="compare">Comparar</div>
+      <div class="tab" data-view="history">Histórico</div>
+      <div class="tab" data-view="cart">Carrito</div>
+    </div>
+  </header>
+
+  <main>
+    <!-- COMPARE + HISTORY share a search box -->
+    <section id="view-compare">
+      <div class="search">
+        <input type="text" id="q" placeholder="Buscar producto o EAN… (ej: leche, coca 2.25, 7790…)">
+      </div>
+      <div class="results" id="search-results"></div>
+      <div id="compare-panel"></div>
+    </section>
+
+    <section id="view-history" class="hidden">
+      <div class="search">
+        <input type="text" id="q2" placeholder="Buscar el producto para ver su evolución de precio…">
+      </div>
+      <div class="results" id="search-results2"></div>
+      <div id="history-panel"></div>
+    </section>
+
+    <!-- CART -->
+    <section id="view-cart" class="hidden">
+      <div class="cart-add">
+        <input type="text" id="cart-q" placeholder="Buscar producto para agregar…">
+      </div>
+      <div class="results" id="cart-search"></div>
+      <div id="cart-lines"></div>
+      <div id="cart-result"></div>
+    </section>
+  </main>
+
+  <script>
+    const STORE_COLOR = { coto:'#e4002b', carrefour:'#004b9b', changomas:'#f5a623', sodimac:'#e2231a' };
+    const STORE_NAME  = { coto:'Coto', carrefour:'Carrefour', changomas:'Chango Más', sodimac:'Sodimac' };
+    const color = slug => STORE_COLOR[slug] || '#8b97b4';
+    const ars = v => v == null ? '—' : '$' + Number(v).toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2});
+    const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; };
+    const debounce = (fn, ms=250) => { let h; return (...a) => { clearTimeout(h); h = setTimeout(() => fn(...a), ms); }; };
+    // Live API first; if the Django backend isn't running (e.g. static preview),
+    // transparently fall back to the embedded DEMO backend below. The DEMO block
+    // mirrors the /api/* response contract exactly and can be deleted in prod.
+    async function jget(url){ try { const r = await fetch(url); if(!r.ok) throw 0; return await r.json(); } catch(e){ return demoRoute(url); } }
+    async function jpost(url, body){ try { const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); if(!r.ok) throw 0; return await r.json(); } catch(e){ return DEMO.cart(body.items); } }
+
+    /* ----------------- EMBEDDED DEMO BACKEND (offline fallback) ----------------- */
+    // Quantity-aware promo math — a faithful JS port of catalog/pricing.py so the
+    // offline demo produces the same numbers the real backend would.
+    function bestUnit(shelf, promo){
+      if(!promo) return shelf;
+      if(promo.type==='nxm') return shelf*promo.pay/promo.get;
+      if(promo.type==='nth_unit_pct'){ const b=promo.block||2; return ((b-1)*shelf + shelf*(1-promo.pct/100))/b; }
+      if(promo.type==='percent_off') return shelf*(1-promo.pct/100);
+      return shelf;
+    }
+    function costForQty(shelf, promo, qty){
+      if(!promo) return shelf*qty;
+      if(promo.type==='nxm'){ const g=promo.get; if(qty<g) return shelf*qty;
+        return Math.floor(qty/g)*promo.pay*shelf + (qty%g)*shelf; }
+      if(promo.type==='nth_unit_pct'){ const b=promo.block||2; if(qty<b) return shelf*qty;
+        const bc=(b-1)*shelf + shelf*(1-promo.pct/100); return Math.floor(qty/b)*bc + (qty%b)*shelf; }
+      if(promo.type==='percent_off') return shelf*qty*(1-promo.pct/100);
+      return shelf*qty;
+    }
+    // Realistic AR catalog. Note Sodimac (home improvement) carries only some items
+    // — which is exactly how the cart "missing items" path gets exercised.
+    const CATALOG = [
+      { ean:'7790895000123', name:'Coca-Cola Original 2.25L', brand:'Coca-Cola', offers:{
+        coto:{shelf:2890, promo:{type:'nth_unit_pct', block:2, pct:70, label:'70% 2da unidad'}},
+        carrefour:{shelf:2750, promo:{type:'percent_off', pct:20, label:'20% descuento'}},
+        changomas:{shelf:2990, promo:{type:'nxm', get:2, pay:1, label:'2x1'}} }},
+      { ean:'7790742000015', name:'Leche Entera La Serenísima 1L', brand:'La Serenísima', offers:{
+        coto:{shelf:1290, promo:null},
+        carrefour:{shelf:1250, promo:{type:'nxm', get:3, pay:2, label:'3x2'}},
+        changomas:{shelf:1320, promo:null} }},
+      { ean:'7790070410122', name:'Aceite Girasol Natura 900ml', brand:'Natura', offers:{
+        coto:{shelf:3450, promo:{type:'percent_off', pct:15, label:'15% descuento'}},
+        carrefour:{shelf:3390, promo:null},
+        changomas:{shelf:3290, promo:{type:'nth_unit_pct', block:2, pct:50, label:'50% 2da unidad'}} }},
+      { ean:'7791234500018', name:'Fideos Matarazzo Tirabuzón 500g', brand:'Matarazzo', offers:{
+        coto:{shelf:1150, promo:{type:'nxm', get:2, pay:1, label:'2x1'}},
+        carrefour:{shelf:1090, promo:null},
+        changomas:{shelf:1180, promo:null} }},
+      { ean:'7790040991019', name:'Arroz Gallo Oro 1kg', brand:'Gallo', offers:{
+        coto:{shelf:2190, promo:null},
+        carrefour:{shelf:2090, promo:{type:'percent_off', pct:25, label:'25% descuento'}},
+        changomas:{shelf:2150, promo:null} }},
+      { ean:'7792200000015', name:'Yerba Mate Playadito 1kg', brand:'Playadito', offers:{
+        coto:{shelf:3990, promo:{type:'percent_off', pct:10, label:'10% descuento'}},
+        carrefour:{shelf:4150, promo:null},
+        changomas:{shelf:3890, promo:null} }},
+      { ean:'7793640000018', name:'Papel Higiénico Higienol 4u', brand:'Higienol', offers:{
+        coto:{shelf:2790, promo:null},
+        carrefour:{shelf:2690, promo:{type:'nxm', get:2, pay:1, label:'2x1'}},
+        changomas:{shelf:2850, promo:null},
+        sodimac:{shelf:2990, promo:null} }},
+      { ean:'7791290791015', name:'Lavandina Ayudín 1L', brand:'Ayudín', offers:{
+        coto:{shelf:1490, promo:null},
+        carrefour:{shelf:1420, promo:null},
+        changomas:{shelf:1390, promo:{type:'percent_off', pct:15, label:'15% descuento'}},
+        sodimac:{shelf:1350, promo:{type:'percent_off', pct:20, label:'20% descuento'}} }},
+    ];
+    function seed(str){ let h=2166136261; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619); } return (h>>>0)/4294967295; }
+    const DEMO = {
+      search(q){ q=(q||'').toLowerCase();
+        return { results: CATALOG.filter(p => p.name.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q) || p.ean.includes(q))
+          .map(p => ({ ean:p.ean, name:p.name, brand:p.brand,
+            min_oup: Math.min(...Object.values(p.offers).map(o => bestUnit(o.shelf,o.promo))).toFixed(2) })) }; },
+      compare(ean){ const p=CATALOG.find(x=>x.ean===ean); if(!p) return {product:{},offers:[],cheapest:null,store_count:0};
+        const offers = Object.entries(p.offers).map(([slug,o]) => { const oup=bestUnit(o.shelf,o.promo);
+          return { store:STORE_NAME[slug], slug, list_price:o.shelf.toFixed(2), price:o.shelf.toFixed(2),
+            oup:oup.toFixed(2), price_per_measure:null,
+            discount_pct: o.promo ? +(100*(1-oup/o.shelf)).toFixed(1) : null,
+            promos: o.promo ? [{type:o.promo.type, label:o.promo.label}] : [], url:'#',
+            last_seen:'2026-07-06' }; }).sort((a,b)=> a.oup-b.oup);
+        return { product:{name:p.name, ean:p.ean, brand:p.brand}, offers, cheapest:offers[0], store_count:offers.length }; },
+      history(ean){ const p=CATALOG.find(x=>x.ean===ean); if(!p) return {product:{},days:90,series:[]};
+        const today=new Date('2026-07-06'); const N=13;
+        const series = Object.entries(p.offers).map(([slug,o]) => { const cur=bestUnit(o.shelf,o.promo);
+          const drop = 0.24 + seed(ean+slug)*0.14;                 // 90d ago was 24-38% cheaper (AR inflation)
+          const start = cur*(1-drop); const pts=[];
+          for(let i=0;i<N;i++){ const d=new Date(today); d.setDate(d.getDate()-(N-1-i)*7);
+            const t=i/(N-1); const noise=(seed(ean+slug+i)-0.5)*0.05;
+            pts.push({ date:d.toISOString().slice(0,10), oup:(start+(cur-start)*t)*(1+noise) }); }
+          pts[N-1].oup = cur; pts.forEach(pt => pt.oup = pt.oup.toFixed(2));
+          const change = +(100*(Number(pts[N-1].oup)-Number(pts[0].oup))/Number(pts[0].oup)).toFixed(1);
+          return { slug, store:STORE_NAME[slug], points:pts, change_pct:change }; });
+        return { product:{name:p.name, ean:p.ean}, days:90, series }; },
+      cart(items){
+        const lines = items.map(it => { const p=CATALOG.find(x=>x.ean===it.ean); const offers={};
+          if(p) for(const [slug,o] of Object.entries(p.offers)){ const total=costForQty(o.shelf,o.promo,it.quantity);
+            offers[slug]={ store:STORE_NAME[slug], slug, total, unit:total/it.quantity, promo:o.promo?o.promo.type:null }; }
+          return { ean:it.ean, name:p?p.name:it.ean, quantity:it.quantity, offers }; });
+        const slugs=[...new Set(lines.flatMap(l => Object.keys(l.offers)))];
+        const per_store = slugs.map(slug => { let sub=0,found=0; const missing=[];
+          lines.forEach(l => { const off=l.offers[slug]; if(off){ sub+=off.total; found++; } else missing.push(l.ean); });
+          return { slug, store:STORE_NAME[slug], subtotal:sub.toFixed(2), items_found:found,
+            items_total:lines.length, missing, has_all:missing.length===0 }; })
+          .sort((a,b) => (a.has_all===b.has_all) ? a.subtotal-b.subtotal : (a.has_all?-1:1));
+        let optTotal=0; const picks=[]; const unavailable=[];
+        lines.forEach(l => { const ks=Object.keys(l.offers); if(!ks.length){ unavailable.push(l.ean); return; }
+          const bs=ks.reduce((a,b) => l.offers[a].total<=l.offers[b].total ? a : b); const off=l.offers[bs];
+          optTotal+=off.total; picks.push({ ean:l.ean, name:l.name, quantity:l.quantity, store:off.store,
+            slug:bs, total:off.total.toFixed(2), unit_price:off.unit.toFixed(2), promo:off.promo }); });
+        const best_single = per_store.find(s => s.has_all) || null;
+        const savings = best_single ? (Number(best_single.subtotal)-optTotal).toFixed(2) : null;
+        return { lines, per_store, best_single_store:best_single,
+          optimal_split:{ total:optTotal.toFixed(2), savings_vs_best_single:savings, picks, unavailable },
+          include_conditional:false }; },
+    };
+    function demoRoute(url){
+      const u = new URL(url, location.origin);
+      if(u.pathname==='/api/products/') return DEMO.search(u.searchParams.get('q')||'');
+      const m = u.pathname.match(/\/api\/products\/(.+?)\/(compare|history)\//);
+      if(m) return m[2]==='compare' ? DEMO.compare(m[1]) : DEMO.history(m[1]);
+      return { results:[] };
+    }
+    /* --------------------------- END DEMO BACKEND --------------------------- */
+
+    // ---- tab switching ----
+    document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      ['compare','history','cart'].forEach(v =>
+        document.getElementById('view-' + v).classList.toggle('hidden', v !== t.dataset.view));
+    });
+
+    // ---- shared typeahead ----
+    function wireSearch(inputId, resultsId, onPick){
+      const input = document.getElementById(inputId);
+      const box = document.getElementById(resultsId);
+      input.addEventListener('input', debounce(async () => {
+        const q = input.value.trim();
+        if (q.length < 2){ box.innerHTML = ''; return; }
+        const { results } = await jget('/api/products/?q=' + encodeURIComponent(q));
+        box.innerHTML = '';
+        results.forEach(p => {
+          const row = el(`<div class="result-row">
+            <div><div class="name">${p.name}</div>
+            <div class="meta">${p.brand || ''} · EAN ${p.ean}</div></div>
+            <div class="price">${p.min_oup ? 'desde ' + ars(p.min_oup) : ''}</div></div>`);
+          row.onclick = () => { box.innerHTML = ''; input.value = p.name; onPick(p); };
+          box.appendChild(row);
+        });
+      }));
+    }
+
+    // ================= COMPARE =================
+    wireSearch('q', 'search-results', async p => {
+      const data = await jget('/api/products/' + p.ean + '/compare/');
+      const panel = document.getElementById('compare-panel');
+      if (!data.offers.length){ panel.innerHTML = '<div class="empty">Sin ofertas disponibles.</div>'; return; }
+      const rows = data.offers.map((o, i) => `
+        <div class="offer ${i === 0 ? 'best' : ''}">
+          <span class="dot" style="background:${color(o.slug)}"></span>
+          <span class="store">${o.store}</span>
+          ${i === 0 ? '<span class="badge">más barato</span>' : ''}
+          ${(o.promos || []).map(pr => `<span class="tag">🏷️ ${pr.label}</span>`).join('')}
+          <span class="oup">
+            <b>${ars(o.oup)}</b>${o.discount_pct ? ` <span class="badge save">-${o.discount_pct}%</span>` : ''}
+            ${o.list_price && o.list_price !== o.price ? `<div class="list">${ars(o.list_price)}</div>` : ''}
+            ${o.price_per_measure ? `<div class="muted" style="font-size:12px">${ars(o.price_per_measure)}/u.med.</div>` : ''}
+          </span>
+        </div>`).join('');
+      panel.innerHTML = `<h2>${data.product.name}</h2>
+        <div class="muted">${data.store_count} tiendas · precio óptimo (OUP) incluye promos</div>
+        <div class="offers">${rows}</div>`;
+    });
+
+    // ================= HISTORY =================
+    wireSearch('q2', 'search-results2', async p => {
+      const data = await jget('/api/products/' + p.ean + '/history/?days=90');
+      renderHistory(data);
+    });
+
+    function renderHistory(data){
+      const panel = document.getElementById('history-panel');
+      const series = data.series.filter(s => s.points.length);
+      if (!series.length){ panel.innerHTML = '<div class="empty">Sin histórico.</div>'; return; }
+      panel.innerHTML = `<h2>${data.product.name}</h2>
+        <div class="muted">Evolución de precio óptimo · últimos ${data.days} días</div>
+        <div class="legend">${series.map(s =>
+          `<span><span class="dot" style="background:${color(s.slug)}"></span>${s.store}
+           ${s.change_pct != null ? `<b class="${s.change_pct > 0 ? '' : 'win'}">${s.change_pct > 0 ? '+' : ''}${s.change_pct}%</b>` : ''}</span>`
+        ).join('')}</div>
+        <div class="chart">${lineChart(series)}</div>`;
+    }
+
+    // Minimal dependency-free SVG line chart.
+    function lineChart(series){
+      const W = 920, H = 320, P = 44;
+      const all = series.flatMap(s => s.points);
+      const dates = [...new Set(all.map(p => p.date))].sort();
+      const xs = d => P + (dates.indexOf(d) / Math.max(1, dates.length - 1)) * (W - 2*P);
+      const vals = all.map(p => Number(p.oup));
+      let lo = Math.min(...vals), hi = Math.max(...vals);
+      if (lo === hi){ lo -= 1; hi += 1; }
+      const pad = (hi - lo) * 0.1; lo -= pad; hi += pad;
+      const ys = v => H - P - ((v - lo) / (hi - lo)) * (H - 2*P);
+      const grid = [0,0.25,0.5,0.75,1].map(f => {
+        const v = lo + f*(hi-lo), y = ys(v);
+        return `<line x1="${P}" y1="${y}" x2="${W-P}" y2="${y}" stroke="#2a3550"/>
+                <text x="8" y="${y+4}" fill="#8b97b4" font-size="11">${ars(v)}</text>`;
+      }).join('');
+      const paths = series.map(s => {
+        const pts = s.points.slice().sort((a,b) => a.date.localeCompare(b.date));
+        const d = pts.map((p,i) => `${i ? 'L' : 'M'}${xs(p.date).toFixed(1)} ${ys(Number(p.oup)).toFixed(1)}`).join(' ');
+        const dot = pts.length ? `<circle cx="${xs(pts.at(-1).date).toFixed(1)}" cy="${ys(Number(pts.at(-1).oup)).toFixed(1)}" r="3.5" fill="${color(s.slug)}"/>` : '';
+        return `<path d="${d}" fill="none" stroke="${color(s.slug)}" stroke-width="2.5"/>${dot}`;
+      }).join('');
+      const xlab = [dates[0], dates.at(-1)].map((d,i) =>
+        `<text x="${i ? W-P : P}" y="${H-14}" fill="#8b97b4" font-size="11" text-anchor="${i ? 'end' : 'start'}">${d}</text>`).join('');
+      return `<svg viewBox="0 0 ${W} ${H}" width="100%">${grid}${paths}${xlab}</svg>`;
+    }
+
+    // ================= CART =================
+    const cart = [];   // [{ean, name, quantity}]
+    wireSearch('cart-q', 'cart-search', p => {
+      if (!cart.find(c => c.ean === p.ean)) cart.push({ ean:p.ean, name:p.name, quantity:1 });
+      document.getElementById('cart-q').value = '';
+      document.getElementById('cart-search').innerHTML = '';
+      renderCart();
+    });
+
+    function renderCart(){
+      const box = document.getElementById('cart-lines');
+      if (!cart.length){ box.innerHTML = '<div class="empty">Agregá productos para comparar tu carrito.</div>';
+                         document.getElementById('cart-result').innerHTML = ''; return; }
+      box.innerHTML = `<h2>Tu lista (${cart.length})</h2>` + cart.map((c, i) => `
+        <div class="offer">
+          <span class="name">${c.name}</span>
+          <span class="muted" style="font-size:12px">EAN ${c.ean}</span>
+          <span style="margin-left:auto; display:flex; gap:8px; align-items:center">
+            <button data-dec="${i}">−</button>
+            <b>${c.quantity}</b>
+            <button data-inc="${i}">+</button>
+            <button data-del="${i}">✕</button>
+          </span>
+        </div>`).join('') + `<div style="margin-top:12px"><button class="primary" id="optimize">Comparar carrito</button></div>`;
+      box.querySelectorAll('[data-inc]').forEach(b => b.onclick = () => { cart[b.dataset.inc].quantity++; renderCart(); });
+      box.querySelectorAll('[data-dec]').forEach(b => b.onclick = () => { const c = cart[b.dataset.dec]; c.quantity = Math.max(1, c.quantity-1); renderCart(); });
+      box.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { cart.splice(b.dataset.del, 1); renderCart(); });
+      document.getElementById('optimize').onclick = optimizeCart;
+    }
+
+    async function optimizeCart(){
+      const data = await jpost('/api/cart/optimize/', { items: cart.map(c => ({ ean:c.ean, quantity:c.quantity })) });
+      const out = document.getElementById('cart-result');
+      const os = data.optimal_split;
+      const best = data.best_single_store;
+      out.innerHTML = `
+        <div class="summary">
+          <div class="card">Mejor tienda única
+            <div><b>${best ? best.store : '—'}</b></div>
+            <div class="muted">${best ? ars(best.subtotal) : 'ninguna tiene todo'}</div></div>
+          <div class="card">Comprando en varias (óptimo)
+            <div><b class="win">${ars(os.total)}</b></div>
+            <div class="muted">${os.savings_vs_best_single ? 'ahorrás ' + ars(os.savings_vs_best_single) : ''}</div></div>
+        </div>
+        <h2>Carrito completo por tienda</h2>
+        <table><thead><tr><th>Tienda</th><th class="num">Ítems</th><th class="num">Total</th></tr></thead><tbody>
+          ${data.per_store.map(s => `<tr>
+            <td><span class="dot" style="background:${color(s.slug)};display:inline-block;margin-right:8px"></span>${s.store}
+              ${s.has_all ? '' : `<span class="muted">(faltan ${s.missing.length})</span>`}</td>
+            <td class="num">${s.items_found}/${s.items_total}</td>
+            <td class="num">${ars(s.subtotal)}</td></tr>`).join('')}
+        </tbody></table>
+        <h2>Ruta óptima (dónde comprar cada uno)</h2>
+        <table><thead><tr><th>Producto</th><th class="num">Cant.</th><th>Tienda</th><th class="num">Subtotal</th></tr></thead><tbody>
+          ${os.picks.map(p => `<tr>
+            <td>${p.name}</td><td class="num">${p.quantity}</td>
+            <td><span class="dot" style="background:${color(p.slug)};display:inline-block;margin-right:8px"></span>${p.store}</td>
+            <td class="num">${ars(p.total)}</td></tr>`).join('')}
+        </tbody></table>`;
+    }
+
+    renderCart();
+  </script>
+</body>
+</html>

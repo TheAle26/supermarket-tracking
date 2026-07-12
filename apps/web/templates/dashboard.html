@@ -24,14 +24,19 @@
     .search { display:flex; gap:8px; margin-bottom:16px; }
     input[type=text] { flex:1; padding:11px 14px; border-radius:9px; border:1px solid var(--line);
                        background:var(--panel); color:var(--text); font-size:15px; }
-    .results { display:grid; gap:8px; }
+    .results { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:12px; }
     .result-row, .card { background:var(--panel); border:1px solid var(--line);
                          border-radius:11px; padding:14px 16px; }
-    .result-row { display:flex; align-items:center; gap:12px; cursor:pointer; }
-    .result-row:hover { border-color:var(--accent2); }
+    .result-row { display:flex; flex-direction:column; align-items:stretch; gap:0; cursor:pointer;
+                  padding:0; overflow:hidden; min-height:250px; }
+    .result-row:hover { border-color:var(--accent2); transform:translateY(-1px); }
+    .product-image { display:block; width:100%; height:150px; object-fit:contain; background:#fff; }
+    .product-image--placeholder { display:grid; place-items:center; color:var(--muted);
+                                  background:var(--panel2); font-size:13px; }
+    .product-info { display:grid; gap:4px; padding:12px 14px 14px; height:100%; }
     .result-row .name { font-weight:600; }
     .result-row .meta { color:var(--muted); font-size:13px; }
-    .price { margin-left:auto; font-weight:700; font-size:16px; white-space:nowrap; }
+    .price { margin-top:auto; font-weight:700; font-size:16px; white-space:nowrap; color:var(--accent); }
     .muted { color:var(--muted); }
     .offers { display:grid; gap:10px; margin-top:14px; }
     .offer { display:flex; align-items:center; gap:14px; padding:14px 16px;
@@ -70,6 +75,8 @@
     .win { color:var(--accent); }
     .hidden { display:none; }
     .empty { color:var(--muted); text-align:center; padding:40px; }
+    @media (max-width:520px) { main { padding:16px; } .results { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+      .product-image { height:118px; } .product-info { padding:10px; } .result-row { min-height:220px; } }
   </style>
 </head>
 <body>
@@ -124,7 +131,7 @@
     // Production UI always uses the Django API. Never substitute demo prices
     // when the real backend is unavailable.
     async function jget(url){
-      const r = await fetch(url);
+      const r = await fetch(url, {cache:'no-store', headers:{Accept:'application/json'}});
       if(!r.ok) throw new Error(`API ${r.status}`);
       return await r.json();
     }
@@ -271,7 +278,8 @@
           const { results } = await jget('/api/products/?limit=30' + query);
           render(results);
         } catch (error) {
-          box.innerHTML = '<div class="empty">No se pudo cargar el catálogo real.</div>';
+          console.error('Catalog load failed:', error);
+          box.innerHTML = `<div class="empty">No se pudo cargar el catálogo real: ${esc(error.message || 'error desconocido')}</div>`;
         }
       }
 
@@ -282,10 +290,23 @@
           return;
         }
         results.forEach(p => {
+          const imageUrl = /^https?:\/\//i.test(p.image_url || '') ? p.image_url : '';
+          const image = imageUrl
+            ? `<img class="product-image" src="${esc(imageUrl)}" alt="${esc(p.name)}" loading="lazy">`
+            : '<div class="product-image product-image--placeholder">Sin foto</div>';
           const row = el(`<div class="result-row">
-            <div><div class="name">${esc(p.name)}</div>
-            <div class="meta">${esc(p.brand || '')} · EAN ${esc(p.ean)}</div></div>
-            <div class="price">${p.min_oup ? 'desde ' + ars(p.min_oup) : ''}</div></div>`);
+            ${image}
+            <div class="product-info"><div class="name">${esc(p.name)}</div>
+            <div class="meta">${esc(p.brand || '')}</div>
+            <div class="meta">EAN ${esc(p.ean)}</div>
+            <div class="price">${p.min_oup ? 'desde ' + ars(p.min_oup) : ''}</div></div></div>`);
+          const imageElement = row.querySelector('img.product-image');
+          if (imageElement) imageElement.onerror = () => {
+            const placeholder = document.createElement('div');
+            placeholder.className = 'product-image product-image--placeholder';
+            placeholder.textContent = 'Sin foto';
+            imageElement.replaceWith(placeholder);
+          };
           row.onclick = () => { box.innerHTML = ''; input.value = p.name; onPick(p); };
           box.appendChild(row);
         });

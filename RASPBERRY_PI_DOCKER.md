@@ -161,6 +161,31 @@ Seed the demonstration catalog once:
 docker compose exec web python manage.py seed_demo
 ```
 
+The demo command does **not** download real prices. To use only real data,
+remove those fixture records and bootstrap the supported public storefronts:
+
+```bash
+docker compose exec web python manage.py clear_demo_catalog --yes
+docker compose exec web python manage.py bootstrap_vtex_stores
+```
+
+The bootstrap command makes live Internet requests to Carrefour and Chango Más,
+downloads their VTEX category trees, and saves the category IDs needed by the
+scrapers. Trigger the first real refresh immediately instead of waiting for the
+next 30-minute schedule:
+
+```bash
+docker compose exec web python manage.py shell -c "from scraping.tasks import dispatch_frequent; dispatch_frequent.delay()"
+docker compose logs -f worker
+```
+
+The worker should log `Dispatching carrefour` / `Dispatching changomas`, then
+one `scrape_shard` task for each category. To inspect saved real scrape runs:
+
+```bash
+docker compose exec web python manage.py shell -c "from catalog.models import ScrapeRun; print(list(ScrapeRun.objects.order_by('-started_at').values('store__slug','status','items_seen','items_written','last_error')[:20]))"
+```
+
 Create a Django administrator:
 
 ```bash

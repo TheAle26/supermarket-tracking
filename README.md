@@ -115,6 +115,17 @@ Run Django checks:
 python manage.py check
 ```
 
+Remove demonstration data and configure the two supported real storefronts:
+
+```powershell
+python manage.py clear_demo_catalog --yes
+python manage.py bootstrap_vtex_stores
+```
+
+`bootstrap_vtex_stores` makes live HTTP requests to Carrefour and Chango Más to
+discover their public VTEX category trees. It then enables their scheduled
+scrapers. Coto and Sodimac are intentionally not enabled by this command.
+
 Check whether migrations are up to date:
 
 ```powershell

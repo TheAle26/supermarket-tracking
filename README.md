@@ -11,7 +11,7 @@ The app stores products by EAN, keeps per-store listings separately, computes pr
 - Calculates the best unconditional unit price for promotions such as 2x1, 3x2, percent-off, and bulk offers.
 - Stores current price snapshots for fast comparison queries.
 - Stores daily price history in PostgreSQL monthly partitions.
-- Refreshes lightweight HTTP/API sources every 30 minutes and headless sources
+- Refreshes lightweight HTTP/API sources every 12 hours and headless sources
   every six hours while Celery worker and Beat are running.
 - Excludes offers older than 48 hours from current comparisons by default.
 - Serves a lightweight dashboard at `http://127.0.0.1:8000/`.

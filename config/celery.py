@@ -3,7 +3,7 @@ config/celery.py
 ================
 Celery app + Beat schedule:
 
-    every 30m  dispatch_frequent       -> API/HTTP stores
+    03:00/15:00 dispatch_frequent      -> API/HTTP stores
     every 6h   dispatch_headless       -> browser-based stores
     05:30 ART  mark_stale_out_of_stock -> flag vanished listings as OOS
     06:00 ART  prune_price_history     -> archive + drop out-of-window partitions
@@ -34,7 +34,8 @@ app.conf.timezone = "America/Argentina/Buenos_Aires"
 app.conf.beat_schedule = {
     "frequent-api-scrape": {
         "task": "scraping.dispatch_frequent",
-        "schedule": crontab(minute="*/30"),
+        # Carrefour / Chango Más: twice daily, 12 hours apart.
+        "schedule": crontab(hour="3,15", minute=0),
     },
     "headless-scrape": {
         "task": "scraping.dispatch_headless",

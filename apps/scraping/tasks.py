@@ -50,7 +50,7 @@ def dispatch_daily() -> None:
 
 @shared_task(name="scraping.dispatch_frequent")
 def dispatch_frequent() -> None:
-    """Refresh inexpensive HTTP/API stores every 30 minutes by default."""
+    """Refresh inexpensive HTTP/API stores twice daily (every 12 hours)."""
     stores = Store.objects.filter(is_active=True, requires_headless=False)
     _dispatch_stores(stores, stagger_seconds=60)
 

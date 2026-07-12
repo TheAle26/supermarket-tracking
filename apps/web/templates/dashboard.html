@@ -61,6 +61,7 @@
              background:var(--panel2); color:var(--text); cursor:pointer; font-size:14px; }
     button.primary { background:var(--accent); color:#04120a; border-color:var(--accent);
                      font-weight:700; }
+    button.back { margin:0 0 10px; padding:8px 13px; }
     .pill { background:var(--panel2); border:1px solid var(--line); border-radius:20px;
             padding:4px 10px; font-size:13px; display:inline-flex; gap:8px; align-items:center; }
     .pill b { color:var(--accent); }
@@ -116,12 +117,22 @@
     const color = slug => STORE_COLOR[slug] || '#8b97b4';
     const ars = v => v == null ? '—' : '$' + Number(v).toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2});
     const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; };
+    const esc = value => String(value ?? '').replace(/[&<>'"]/g, c => ({
+      '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;'
+    })[c]);
     const debounce = (fn, ms=250) => { let h; return (...a) => { clearTimeout(h); h = setTimeout(() => fn(...a), ms); }; };
-    // Live API first; if the Django backend isn't running (e.g. static preview),
-    // transparently fall back to the embedded DEMO backend below. The DEMO block
-    // mirrors the /api/* response contract exactly and can be deleted in prod.
-    async function jget(url){ try { const r = await fetch(url); if(!r.ok) throw 0; return await r.json(); } catch(e){ return demoRoute(url); } }
-    async function jpost(url, body){ try { const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); if(!r.ok) throw 0; return await r.json(); } catch(e){ return DEMO.cart(body.items); } }
+    // Production UI always uses the Django API. Never substitute demo prices
+    // when the real backend is unavailable.
+    async function jget(url){
+      const r = await fetch(url);
+      if(!r.ok) throw new Error(`API ${r.status}`);
+      return await r.json();
+    }
+    async function jpost(url, body){
+      const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+      if(!r.ok) throw new Error(`API ${r.status}`);
+      return await r.json();
+    }
 
     /* ----------------- EMBEDDED DEMO BACKEND (offline fallback) ----------------- */
     // Quantity-aware promo math — a faithful JS port of catalog/pricing.py so the
@@ -237,70 +248,120 @@
     }
     /* --------------------------- END DEMO BACKEND --------------------------- */
 
+    const searchControllers = {};
+
     // ---- tab switching ----
     document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
       document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
       t.classList.add('active');
       ['compare','history','cart'].forEach(v =>
         document.getElementById('view-' + v).classList.toggle('hidden', v !== t.dataset.view));
+      const controller = searchControllers[t.dataset.view];
+      if (controller && controller.isEmpty()) controller.showInitial();
     });
 
-    // ---- shared typeahead ----
+    // ---- shared initial catalog + typeahead ----
     function wireSearch(inputId, resultsId, onPick){
       const input = document.getElementById(inputId);
       const box = document.getElementById(resultsId);
-      input.addEventListener('input', debounce(async () => {
-        const q = input.value.trim();
-        if (q.length < 2){ box.innerHTML = ''; return; }
-        const { results } = await jget('/api/products/?q=' + encodeURIComponent(q));
+
+      async function load(q=''){
+        try {
+          const query = q ? '&q=' + encodeURIComponent(q) : '';
+          const { results } = await jget('/api/products/?limit=30' + query);
+          render(results);
+        } catch (error) {
+          box.innerHTML = '<div class="empty">No se pudo cargar el catálogo real.</div>';
+        }
+      }
+
+      function render(results){
         box.innerHTML = '';
+        if (!results.length){
+          box.innerHTML = '<div class="empty">No hay productos disponibles.</div>';
+          return;
+        }
         results.forEach(p => {
           const row = el(`<div class="result-row">
-            <div><div class="name">${p.name}</div>
-            <div class="meta">${p.brand || ''} · EAN ${p.ean}</div></div>
+            <div><div class="name">${esc(p.name)}</div>
+            <div class="meta">${esc(p.brand || '')} · EAN ${esc(p.ean)}</div></div>
             <div class="price">${p.min_oup ? 'desde ' + ars(p.min_oup) : ''}</div></div>`);
           row.onclick = () => { box.innerHTML = ''; input.value = p.name; onPick(p); };
           box.appendChild(row);
         });
+      }
+
+      input.addEventListener('input', debounce(() => {
+        const q = input.value.trim();
+        if (!q){ load(); return; }
+        if (q.length < 2) return;
+        load(q);
       }));
+
+      return {
+        showInitial: () => load(),
+        isEmpty: () => !input.value.trim() && !box.children.length,
+        reset: () => { input.value = ''; load(); },
+      };
+    }
+
+    function backToProducts(view){
+      const panelId = view === 'compare' ? 'compare-panel' : 'history-panel';
+      document.getElementById(panelId).innerHTML = '';
+      searchControllers[view].reset();
     }
 
     // ================= COMPARE =================
-    wireSearch('q', 'search-results', async p => {
-      const data = await jget('/api/products/' + p.ean + '/compare/');
+    searchControllers.compare = wireSearch('q', 'search-results', async p => {
       const panel = document.getElementById('compare-panel');
-      if (!data.offers.length){ panel.innerHTML = '<div class="empty">Sin ofertas disponibles.</div>'; return; }
+      let data;
+      try {
+        data = await jget('/api/products/' + p.ean + '/compare/');
+      } catch (error) {
+        panel.innerHTML = '<button class="back" onclick="backToProducts(\'compare\')">← Volver a productos</button><div class="empty">No se pudo cargar la comparación.</div>';
+        return;
+      }
+      if (!data.offers.length){
+        panel.innerHTML = '<button class="back" onclick="backToProducts(\'compare\')">← Volver a productos</button><div class="empty">Sin ofertas disponibles.</div>';
+        return;
+      }
       const rows = data.offers.map((o, i) => `
         <div class="offer ${i === 0 ? 'best' : ''}">
           <span class="dot" style="background:${color(o.slug)}"></span>
-          <span class="store">${o.store}</span>
+          <span class="store">${esc(o.store)}</span>
           ${i === 0 ? '<span class="badge">más barato</span>' : ''}
-          ${(o.promos || []).map(pr => `<span class="tag">🏷️ ${pr.label}</span>`).join('')}
+          ${(o.promos || []).map(pr => `<span class="tag">🏷️ ${esc(pr.label)}</span>`).join('')}
           <span class="oup">
             <b>${ars(o.oup)}</b>${o.discount_pct ? ` <span class="badge save">-${o.discount_pct}%</span>` : ''}
             ${o.list_price && o.list_price !== o.price ? `<div class="list">${ars(o.list_price)}</div>` : ''}
             ${o.price_per_measure ? `<div class="muted" style="font-size:12px">${ars(o.price_per_measure)}/u.med.</div>` : ''}
           </span>
         </div>`).join('');
-      panel.innerHTML = `<h2>${data.product.name}</h2>
+      panel.innerHTML = `<button class="back" onclick="backToProducts('compare')">← Volver a productos</button>
+        <h2>${esc(data.product.name)}</h2>
         <div class="muted">${data.store_count} tiendas · precio óptimo (OUP) incluye promos</div>
         <div class="offers">${rows}</div>`;
     });
 
     // ================= HISTORY =================
-    wireSearch('q2', 'search-results2', async p => {
-      const data = await jget('/api/products/' + p.ean + '/history/?days=90');
-      renderHistory(data);
+    searchControllers.history = wireSearch('q2', 'search-results2', async p => {
+      try {
+        const data = await jget('/api/products/' + p.ean + '/history/?days=90');
+        renderHistory(data);
+      } catch (error) {
+        document.getElementById('history-panel').innerHTML = '<button class="back" onclick="backToProducts(\'history\')">← Volver a productos</button><div class="empty">No se pudo cargar el histórico.</div>';
+      }
     });
 
     function renderHistory(data){
       const panel = document.getElementById('history-panel');
       const series = data.series.filter(s => s.points.length);
-      if (!series.length){ panel.innerHTML = '<div class="empty">Sin histórico.</div>'; return; }
-      panel.innerHTML = `<h2>${data.product.name}</h2>
+      if (!series.length){ panel.innerHTML = '<button class="back" onclick="backToProducts(\'history\')">← Volver a productos</button><div class="empty">Sin histórico.</div>'; return; }
+      panel.innerHTML = `<button class="back" onclick="backToProducts('history')">← Volver a productos</button>
+        <h2>${esc(data.product.name)}</h2>
         <div class="muted">Evolución de precio óptimo · últimos ${data.days} días</div>
         <div class="legend">${series.map(s =>
-          `<span><span class="dot" style="background:${color(s.slug)}"></span>${s.store}
+          `<span><span class="dot" style="background:${color(s.slug)}"></span>${esc(s.store)}
            ${s.change_pct != null ? `<b class="${s.change_pct > 0 ? '' : 'win'}">${s.change_pct > 0 ? '+' : ''}${s.change_pct}%</b>` : ''}</span>`
         ).join('')}</div>
         <div class="chart">${lineChart(series)}</div>`;
@@ -335,7 +396,7 @@
 
     // ================= CART =================
     const cart = [];   // [{ean, name, quantity}]
-    wireSearch('cart-q', 'cart-search', p => {
+    searchControllers.cart = wireSearch('cart-q', 'cart-search', p => {
       if (!cart.find(c => c.ean === p.ean)) cart.push({ ean:p.ean, name:p.name, quantity:1 });
       document.getElementById('cart-q').value = '';
       document.getElementById('cart-search').innerHTML = '';
@@ -348,8 +409,8 @@
                          document.getElementById('cart-result').innerHTML = ''; return; }
       box.innerHTML = `<h2>Tu lista (${cart.length})</h2>` + cart.map((c, i) => `
         <div class="offer">
-          <span class="name">${c.name}</span>
-          <span class="muted" style="font-size:12px">EAN ${c.ean}</span>
+          <span class="name">${esc(c.name)}</span>
+          <span class="muted" style="font-size:12px">EAN ${esc(c.ean)}</span>
           <span style="margin-left:auto; display:flex; gap:8px; align-items:center">
             <button data-dec="${i}">−</button>
             <b>${c.quantity}</b>
@@ -364,14 +425,20 @@
     }
 
     async function optimizeCart(){
-      const data = await jpost('/api/cart/optimize/', { items: cart.map(c => ({ ean:c.ean, quantity:c.quantity })) });
       const out = document.getElementById('cart-result');
+      let data;
+      try {
+        data = await jpost('/api/cart/optimize/', { items: cart.map(c => ({ ean:c.ean, quantity:c.quantity })) });
+      } catch (error) {
+        out.innerHTML = '<div class="empty">No se pudo comparar el carrito con datos reales.</div>';
+        return;
+      }
       const os = data.optimal_split;
       const best = data.best_single_store;
       out.innerHTML = `
         <div class="summary">
           <div class="card">Mejor tienda única
-            <div><b>${best ? best.store : '—'}</b></div>
+            <div><b>${best ? esc(best.store) : '—'}</b></div>
             <div class="muted">${best ? ars(best.subtotal) : 'ninguna tiene todo'}</div></div>
           <div class="card">Comprando en varias (óptimo)
             <div><b class="win">${ars(os.total)}</b></div>
@@ -380,7 +447,7 @@
         <h2>Carrito completo por tienda</h2>
         <table><thead><tr><th>Tienda</th><th class="num">Ítems</th><th class="num">Total</th></tr></thead><tbody>
           ${data.per_store.map(s => `<tr>
-            <td><span class="dot" style="background:${color(s.slug)};display:inline-block;margin-right:8px"></span>${s.store}
+            <td><span class="dot" style="background:${color(s.slug)};display:inline-block;margin-right:8px"></span>${esc(s.store)}
               ${s.has_all ? '' : `<span class="muted">(faltan ${s.missing.length})</span>`}</td>
             <td class="num">${s.items_found}/${s.items_total}</td>
             <td class="num">${ars(s.subtotal)}</td></tr>`).join('')}
@@ -388,13 +455,14 @@
         <h2>Ruta óptima (dónde comprar cada uno)</h2>
         <table><thead><tr><th>Producto</th><th class="num">Cant.</th><th>Tienda</th><th class="num">Subtotal</th></tr></thead><tbody>
           ${os.picks.map(p => `<tr>
-            <td>${p.name}</td><td class="num">${p.quantity}</td>
-            <td><span class="dot" style="background:${color(p.slug)};display:inline-block;margin-right:8px"></span>${p.store}</td>
+            <td>${esc(p.name)}</td><td class="num">${p.quantity}</td>
+            <td><span class="dot" style="background:${color(p.slug)};display:inline-block;margin-right:8px"></span>${esc(p.store)}</td>
             <td class="num">${ars(p.total)}</td></tr>`).join('')}
         </tbody></table>`;
     }
 
     renderCart();
+    searchControllers.compare.showInitial();
   </script>
 </body>
 </html>

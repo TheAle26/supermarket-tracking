@@ -85,10 +85,17 @@ def search(request):
     limit, error = _bounded_query_int(request, "limit", 20, 1, 50)
     if error:
         return error
-    if not q:
-        return JsonResponse({"results": []})
-
-    qs = Product.objects.search(q).with_price_summary()[:limit]
+    # Empty search = initial catalog. Only expose active products that currently
+    # have at least one fresh, available offer; newest scraped products first.
+    qs = Product.objects.with_price_summary().filter(
+        is_active=True,
+        min_oup__isnull=False,
+    )
+    if q:
+        qs = qs.search(q).order_by("name", "ean")
+    else:
+        qs = qs.order_by("-updated_at", "name")
+    qs = qs[:limit]
     results = [
         {**_product_dict(p), "min_oup": _money(getattr(p, "min_oup", None))}
         for p in qs

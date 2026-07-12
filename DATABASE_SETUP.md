@@ -136,7 +136,7 @@ ORDER BY child.relname;
 
 `StoreProduct.current_*` is a latest-value snapshot, so the comparison API shows
 the newest price as soon as a scrape persists it. Celery refreshes inexpensive
-HTTP/API sources every 30 minutes and browser-based sources every six hours.
+HTTP/API sources every 12 hours and browser-based sources every six hours.
 Comparison is therefore near-real-time while the worker and Beat are running.
 `PriceHistory` still has daily granularity.
 

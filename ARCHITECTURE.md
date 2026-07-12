@@ -115,7 +115,7 @@ a throttled **PDP pass** resolves the GTIN before linking (never match on skuId)
 
 ```
 Celery Beat (America/Argentina/Buenos_Aires)
-  ├─ dispatch_frequent                  API/HTTP stores every 30 minutes
+  ├─ dispatch_frequent                  API/HTTP stores every 12 hours
   └─ dispatch_headless                  browser stores every 6 hours
        └─ dispatch_store_scrape(store)  ask registry for scraper, list category shards
             └─ scrape_shard(store,shard) ← UNIT of parallelism / retry / rate-limit

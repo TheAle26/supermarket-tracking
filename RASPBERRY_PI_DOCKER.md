@@ -194,7 +194,8 @@ docker compose exec web python manage.py createsuperuser
 
 ## 5. Scraping behavior
 
-Carrefour and Chango Mas use the lightweight HTTP/API schedule every 30 minutes.
+Carrefour and Chango Mas use the lightweight HTTP/API schedule every 12 hours
+(03:00 and 15:00, Argentina time).
 Coto and Sodimac remain disabled until their live endpoints are verified. Do not
 enable the Sodimac scraper in this image yet: its Playwright Python dependency is
 installed, but a Raspberry Pi Chromium runtime is not included.
